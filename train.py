@@ -259,3 +259,6 @@ def main(model_config, train_config):
       if step % train_config['save_model_every_n_step'] == 0 or (step + 1) == total_steps:
         checkpoint_path = osp.join(train_config['train_dir'], 'model.ckpt')
         saver.save(sess, checkpoint_path, global_step=step)
+
+
+main(configuration.MODEL_CONFIG, configuration.TRAIN_CONFIG)
