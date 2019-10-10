@@ -48,6 +48,7 @@ parser.add_argument("--random-mirror", action="store_true", default=False)
 parser.add_argument("--width", type=int, default=800)
 parser.add_argument("--height", type=int, default=600)
 parser.add_argument("--batch-size", type=int, default=1)
+parser.add_argument("--initial-lr", type=float, default=1e-3)
 parser.add_argument("--num-epochs", type=int, default=100)
 parser.add_argument("--epoch-size", type=int, default=2000)
 parser.add_argument("--steps-per-model-save", type=int, default=None, help="default to epoch length")
@@ -69,6 +70,7 @@ configuration.TRAIN_CONFIG["train_data_config"]["epoch"] = args.num_epochs
 configuration.TRAIN_CONFIG["train_data_config"]["batch_size"] = args.batch_size
 save_model_every_n_steps = args.steps_per_model_save if args.steps_per_model_save is not None else args.epoch_size
 configuration.TRAIN_CONFIG["train_data_config"]["save_model_every_n_steps"] = save_model_every_n_steps
+configuration.TRAIN_CONFIG["lr_config"]["initial_lr"] = args.initial_lr
 
 configuration.TRAIN_CONFIG["validation_data_config"]["random_scale"] = args.random_scale
 configuration.TRAIN_CONFIG["validation_data_config"]["random_mirror"] = args.random_mirror
@@ -244,6 +246,7 @@ def main(model_config, train_config):
                       data_config['num_examples_per_epoch'] /
                       data_config['batch_size'])
     logging.info('Step: {}/{}'.format(start_step, total_steps))
+    logging.info("Learning rate: " + str(learning_rate.eval(session=sess)))
     for step in range(start_step, total_steps):
       start_time = time.time()
       _, predict_loss, loss = sess.run([train_op, model.loss, model.total_loss])
@@ -254,9 +257,9 @@ def main(model_config, train_config):
         time_remain = data_config['batch_size'] * (total_steps - step) / examples_per_sec
         m, s = divmod(time_remain, 60)
         h, m = divmod(m, 60)
-        format_str = ('%s: step %d, total loss = %.2f, predict loss = %.2f (%.1f examples/sec; %.3f '
+        format_str = ('step %d, total loss = %.2f, predict loss = %.2f, lr = %.6f (%.1f examples/sec; %.3f '
                       'sec/batch; %dh:%02dm:%02ds remains)')
-        logging.info(format_str % (datetime.now(), step, loss, predict_loss,
+        logging.info(format_str % (step, loss, predict_loss, learning_rate.eval(session=sess),
                                    examples_per_sec, duration, h, m, s))
 
       if step % 10 == 0:

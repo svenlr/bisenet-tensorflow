@@ -12,40 +12,8 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 from Dataset.dataset import DataLoader
 from builders import frontend_builder
+from utils.misc_utils import get_label_info
 import numpy as np
-
-colors = np.array([[64,128,64],
-[192,0,128],
-[0,128, 192],
-[0, 128, 64],
-[128, 0, 0],
-[64, 0, 128],
-[64, 0, 192],
-[192, 128, 64],
-[192, 192, 128],
-[64, 64, 128],
-[128, 0, 192],
-[192, 0, 64],
-[128, 128, 64],
-[192, 0, 192],
-[128, 64, 64],
-[64, 192, 128],
-[64, 64, 0],
-[128, 64, 128],
-[128, 128, 192],
-[0, 0, 192],
-[192, 128, 128],
-[128, 128, 128],
-[64, 128,192],
-[0, 0, 64],
-[0, 64, 64],
-[192, 64, 128],
-[128, 128, 0],
-[192, 128, 192],
-[64, 0, 64],
-[192, 192, 0],
-[0, 0, 0],
-[64, 192, 0]], dtype=np.float32)
 
 
 def Upsampling(inputs, scale):
@@ -110,6 +78,9 @@ class BiseNet(object):
             self.data_config = self.train_config['validation_data_config']
         elif self.mode == 'test':
             self.data_config = self.train_config['test_data_config']
+
+        categories, label_values = get_label_info(train_config["class_dict"])
+        self.colors = np.array(label_values, dtype=np.float32)
 
         self.images = None
         self.images_feed = None
@@ -252,11 +223,11 @@ class BiseNet(object):
 
         # Tensorboard inspection
         labels_reshaped = tf.reshape(self.labels, [-1, self.num_classes])
-        labels_colored = tf.matmul(labels_reshaped, colors[:self.num_classes])
+        labels_colored = tf.matmul(labels_reshaped, self.colors[:self.num_classes])
         tf.summary.image('image', self.images, family=self.mode, max_outputs=1)
         tf.summary.image('GT', tf.reshape(labels_colored, [-1, shape[1], shape[2], 3]), family=self.mode, max_outputs=1)
         tf.summary.image('response', tf.reshape(tf.matmul(
-            tf.reshape(tf.one_hot(tf.argmax(self.net, -1), self.num_classes), [-1, self.num_classes]), colors[:self.num_classes]),
+            tf.reshape(tf.one_hot(tf.argmax(self.net, -1), self.num_classes), [-1, self.num_classes]), self.colors[:self.num_classes]),
             [-1, shape[1], shape[2], 3]), family=self.mode, max_outputs=1)
         tf.summary.scalar('total_loss', self.total_loss, family=self.mode)
         tf.summary.scalar('loss', self.loss, family=self.mode)
