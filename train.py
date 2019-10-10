@@ -50,6 +50,7 @@ parser.add_argument("--height", type=int, default=600)
 parser.add_argument("--batch-size", type=int, default=1)
 parser.add_argument("--initial-lr", type=float, default=1e-3)
 parser.add_argument("--num-epochs", type=int, default=100)
+parser.add_argument("--restore-from", type=str, default=None)
 parser.add_argument("--epoch-size", type=int, default=2000)
 parser.add_argument("--steps-per-model-save", type=int, default=None, help="default to epoch length")
 args = parser.parse_args()
@@ -163,7 +164,7 @@ def match_loaded_and_memory_tensors(loaded_tensors):
     return full_var_list
 
 
-def main(model_config, train_config):
+def main(model_config, train_config, restore_from=None):
   os.environ['CUDA_VISIBLE_DEVICES'] = auto_select_gpu()
 
   # Create training directory which will be used to save: configurations, model files, TensorBoard logs
@@ -215,7 +216,10 @@ def main(model_config, train_config):
     sess_config = tf.ConfigProto(gpu_options=gpu_options)
 
     sess = tf.Session(config=sess_config)
-    model_path = tf.train.latest_checkpoint(train_config['train_dir'])
+    if restore_from is not None:
+      model_path = restore_from
+    else:
+      model_path = tf.train.latest_checkpoint(train_config['train_dir'])
 
     if not model_path:
       sess.run(global_variables_init_op)
@@ -271,4 +275,4 @@ def main(model_config, train_config):
         saver.save(sess, checkpoint_path, global_step=step)
 
 
-main(configuration.MODEL_CONFIG, configuration.TRAIN_CONFIG)
+main(configuration.MODEL_CONFIG, configuration.TRAIN_CONFIG, restore_from=args.restore_from)
