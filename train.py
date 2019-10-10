@@ -50,6 +50,7 @@ parser.add_argument("--height", type=int, default=600)
 parser.add_argument("--batch-size", type=int, default=1)
 parser.add_argument("--num-epochs", type=int, default=100)
 parser.add_argument("--epoch-size", type=int, default=2000)
+parser.add_argument("--steps-per-model-save", type=int, default=None, help="default to epoch length")
 args = parser.parse_args()
 
 class_dict_file_path = osp.join(args.dataset, "class_dict.csv")
@@ -66,6 +67,8 @@ configuration.TRAIN_CONFIG["train_data_config"]["random_mirror"] = args.random_m
 configuration.TRAIN_CONFIG["train_data_config"]["num_examples_per_epoch"] = args.epoch_size
 configuration.TRAIN_CONFIG["train_data_config"]["epoch"] = args.num_epochs
 configuration.TRAIN_CONFIG["train_data_config"]["batch_size"] = args.batch_size
+save_model_every_n_steps = args.steps_per_model_save if args.steps_per_model_save is not None else args.epoch_size
+configuration.TRAIN_CONFIG["train_data_config"]["save_model_every_n_steps"] = save_model_every_n_steps
 
 
 ex = Experiment(configuration.RUN_NAME)
