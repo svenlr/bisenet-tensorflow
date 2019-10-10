@@ -70,6 +70,10 @@ configuration.TRAIN_CONFIG["train_data_config"]["batch_size"] = args.batch_size
 save_model_every_n_steps = args.steps_per_model_save if args.steps_per_model_save is not None else args.epoch_size
 configuration.TRAIN_CONFIG["train_data_config"]["save_model_every_n_steps"] = save_model_every_n_steps
 
+configuration.TRAIN_CONFIG["validation_data_config"]["random_scale"] = args.random_scale
+configuration.TRAIN_CONFIG["validation_data_config"]["random_mirror"] = args.random_mirror
+configuration.TRAIN_CONFIG["validation_data_config"]["batch_size"] = args.batch_size
+
 
 ex = Experiment(configuration.RUN_NAME)
 ex.observers.append(FileStorageObserver.create(osp.join(configuration.LOG_DIR, 'sacred')))
