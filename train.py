@@ -11,6 +11,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import sys
+import argparse
 import logging
 import os
 import os.path as osp
@@ -22,24 +24,54 @@ import numpy as np
 import tensorflow as tf
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
+from tensorflow.python import pywrap_tensorflow
 
 import configuration
 from utils.misc_utils import auto_select_gpu, mkdir_p, save_cfgs
 
 from models.bisenet import BiseNet
 
+root = logging.getLogger()
+root.setLevel(logging.DEBUG)
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+root.addHandler(handler)
+
+parser = argparse.ArgumentParser(description="train")
+parser.add_argument("--dataset", type=str, required=True,
+                    help="Path to the parent directory of the datset.")
+parser.add_argument("--random-scale", action="store_true", default=False)
+parser.add_argument("--random-mirror", action="store_true", default=False)
+parser.add_argument("--width", type=int, default=800)
+parser.add_argument("--height", type=int, default=600)
+parser.add_argument("--batch-size", type=int, default=1)
+parser.add_argument("--num-epochs", type=int, default=100)
+parser.add_argument("--epoch-size", type=int, default=2000)
+args = parser.parse_args()
+
+class_dict_file_path = osp.join(args.dataset, "class_dict.csv")
+with open(class_dict_file_path) as f:
+  class_dict_lines = f.read().split("\n")
+  class_dict_lines = [l.strip() for l in class_dict_lines if l.strip() != ""]
+
+configuration.TRAIN_CONFIG["DataSet"] = args.dataset
+configuration.TRAIN_CONFIG["class_dict"] = osp.join(args.dataset, "class_dict.csv")
+configuration.TRAIN_CONFIG["train_data_config"]["input_dir"] = osp.join(args.dataset, "train")
+configuration.TRAIN_CONFIG["train_data_config"]["output_dir"] = osp.join(args.dataset, "train_labels")
+configuration.TRAIN_CONFIG["train_data_config"]["random_scale"] = args.random_scale
+configuration.TRAIN_CONFIG["train_data_config"]["random_mirror"] = args.random_mirror
+configuration.TRAIN_CONFIG["train_data_config"]["num_examples_per_epoch"] = args.epoch_size
+configuration.TRAIN_CONFIG["train_data_config"]["epoch"] = args.num_epochs
+configuration.TRAIN_CONFIG["train_data_config"]["batch_size"] = args.batch_size
+
+
 ex = Experiment(configuration.RUN_NAME)
 ex.observers.append(FileStorageObserver.create(osp.join(configuration.LOG_DIR, 'sacred')))
 
-# TODO: num_classes need to fix
-num_classes = 32
-
-
-@ex.config
-def configurations():
-  # Add configurations for current script, for more details please see the documentation of `sacred`.
-  model_config = configuration.MODEL_CONFIG
-  train_config = configuration.TRAIN_CONFIG
+num_classes = len(class_dict_lines) - 1
 
 
 def _configure_learning_rate(train_config, global_step):
@@ -89,7 +121,39 @@ def _configure_optimizer(train_config, learning_rate):
   return optimizer
 
 
-@ex.automain
+def get_tensors_in_checkpoint_file(file_name, all_tensors=True, tensor_name=None):
+    varlist = []
+    var_value = []
+    reader = pywrap_tensorflow.NewCheckpointReader(file_name)
+    if all_tensors:
+        var_to_shape_map = reader.get_variable_to_shape_map()
+        for key in sorted(var_to_shape_map):
+            varlist.append(key)
+            var_value.append(reader.get_tensor(key))
+    else:
+        varlist.append(tensor_name)
+        var_value.append(reader.get_tensor(tensor_name))
+    return (varlist, var_value)
+
+
+def match_loaded_and_memory_tensors(loaded_tensors):
+    full_var_list = list()
+    # Loop all loaded tensors
+    for i, (tensor_name, tensor_loaded) in enumerate(zip(loaded_tensors[0], loaded_tensors[1])):
+        try:
+            # Extract tensor
+            tensor_aux = tf.get_default_graph().get_tensor_by_name(tensor_name + ":0")
+            if not np.array_equal(tensor_aux.shape, tensor_loaded.shape) \
+                    and not np.array_equal(tensor_aux.shape, tensor_loaded.shape[::-1]):
+                print('Weight mismatch for tensor {}: RAM model: {}, Loaded model: {}'.format(tensor_name, tensor_aux.shape,
+                                                                                              tensor_loaded.shape))
+            else:
+                full_var_list.append(tensor_aux)
+        except:
+            print('Loaded a tensor from weights file which has not been found in model: ' + tensor_name)
+    return full_var_list
+
+
 def main(model_config, train_config):
   os.environ['CUDA_VISIBLE_DEVICES'] = auto_select_gpu()
 
@@ -130,15 +194,12 @@ def main(model_config, train_config):
                                                    learning_rate_decay_fn=None,
                                                    summaries=['learning_rate'])
 
-    saver = tf.train.Saver(tf.global_variables(),
-                           max_to_keep=train_config['max_checkpoints_to_keep'])
 
     summary_writer = tf.summary.FileWriter(train_dir, g)
     summary_op = tf.summary.merge_all()
 
     global_variables_init_op = tf.global_variables_initializer()
     local_variables_init_op = tf.local_variables_initializer()
-    g.finalize()  # Finalize graph to avoid adding ops by mistake
 
     # Dynamically allocate GPU memory
     gpu_options = tf.GPUOptions(allow_growth=True)
@@ -156,16 +217,26 @@ def main(model_config, train_config):
         model.init_fn(sess)
     else:
       logging.info('Restore from last checkpoint: {}'.format(model_path))
+      vars_in_checkpoint = get_tensors_in_checkpoint_file(file_name=model_path)
+      loadable_tensors = match_loaded_and_memory_tensors(vars_in_checkpoint)
+      # print("\n".join([t.name for t in loadable_tensors]))
+      loader = tf.train.Saver(var_list=loadable_tensors)
+      sess.run(global_variables_init_op)
       sess.run(local_variables_init_op)
-      saver.restore(sess, model_path)
+      loader.restore(sess, model_path)
       start_step = tf.train.global_step(sess, model.global_step.name) + 1
+
+    saver = tf.train.Saver(tf.global_variables(),
+                           max_to_keep=train_config['max_checkpoints_to_keep'])
+
+    g.finalize()  # Finalize graph to avoid adding ops by mistake
 
     # Training loop
     data_config = train_config['train_data_config']
     total_steps = int(data_config['epoch'] *
                       data_config['num_examples_per_epoch'] /
                       data_config['batch_size'])
-    logging.info('Train for {} steps'.format(total_steps))
+    logging.info('Step: {}/{}'.format(start_step, total_steps))
     for step in range(start_step, total_steps):
       start_time = time.time()
       _, predict_loss, loss = sess.run([train_op, model.loss, model.total_loss])

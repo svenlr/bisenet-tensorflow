@@ -204,10 +204,16 @@ class DataLoader(object):
         output_names = []
         for file in os.listdir(osp.join(dataset_dir, input_dir)):
             cwd = os.getcwd()
-            input_names.append(cwd + "/" + osp.join(dataset_dir, input_dir) + "/" + file)
+            if dataset_dir.startswith("/"):  # detect abs path
+                input_names.append(osp.join(dataset_dir, input_dir, file))
+            else:
+                input_names.append(cwd + "/" + osp.join(dataset_dir, input_dir) + "/" + file)
         for file in os.listdir(osp.join(dataset_dir, output_dir)):
             cwd = os.getcwd()
-            output_names.append(cwd + "/" + osp.join(dataset_dir, output_dir) + "/" + file)
+            if dataset_dir.startswith("/"):  # detect abs path
+                output_names.append(osp.join(dataset_dir, output_dir, file))
+            else:
+                output_names.append(cwd + "/" + osp.join(dataset_dir, output_dir) + "/" + file)
 
         input_names.sort(), output_names.sort()
 

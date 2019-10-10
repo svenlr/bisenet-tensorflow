@@ -251,12 +251,12 @@ class BiseNet(object):
         shape = tf.shape(self.labels)
 
         # Tensorboard inspection
+        labels_reshaped = tf.reshape(self.labels, [-1, self.num_classes])
+        labels_colored = tf.matmul(labels_reshaped, colors[:self.num_classes])
         tf.summary.image('image', self.images, family=self.mode, max_outputs=1)
-        tf.summary.image('GT', tf.reshape(
-            tf.matmul(tf.reshape(self.labels, [-1, 32]), colors), [-1, shape[1], shape[2], 3]),
-                         family=self.mode, max_outputs=1)
+        tf.summary.image('GT', tf.reshape(labels_colored, [-1, shape[1], shape[2], 3]), family=self.mode, max_outputs=1)
         tf.summary.image('response', tf.reshape(tf.matmul(
-            tf.reshape(tf.one_hot(tf.argmax(self.net, -1), self.num_classes), [-1, 32]), colors),
+            tf.reshape(tf.one_hot(tf.argmax(self.net, -1), self.num_classes), [-1, self.num_classes]), colors[:self.num_classes]),
             [-1, shape[1], shape[2], 3]), family=self.mode, max_outputs=1)
         tf.summary.scalar('total_loss', self.total_loss, family=self.mode)
         tf.summary.scalar('loss', self.loss, family=self.mode)

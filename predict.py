@@ -84,18 +84,6 @@ if __name__ == '__main__':
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         img = cv2.resize(img, (infer_size[1], infer_size[0]))
         img = img[np.newaxis, :]
-        
-        # Make the mechine hot
-        _ = sess.run(response, feed_dict={model.images_feed: img})
-        _ = sess.run(response, feed_dict={model.images_feed: img})
-        elapse = []
-        for i in range(50):
-            start = time.time()
-            _ = sess.run(response, feed_dict={model.images_feed: img})
-            duration = time.time() - start
-            print('time: {:.4f}, about {:.6f} fps'.format(duration, 1 / duration))
-            elapse.append(duration)
-        print('Average time: {:.4f}, about {:.6f} fps'.format(np.mean(elapse), 1 / np.mean(elapse)))
 
         predict = tf.reshape(tf.matmul(tf.reshape(tf.one_hot(tf.argmax(response, -1), 32), [-1, 32]), colors),
                              [infer_size[0], infer_size[1], 3])
