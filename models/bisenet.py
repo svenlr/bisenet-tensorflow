@@ -116,7 +116,7 @@ class BiseNet(object):
 
     def is_training(self):
         """Returns true if the model is built for training mode"""
-        return self.mode == 'train' and self.model_config["bn_is_training"]
+        return self.mode == 'train'
 
     def setup_global_step(self):
         global_step = tf.Variable(

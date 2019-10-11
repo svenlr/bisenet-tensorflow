@@ -104,6 +104,9 @@ TRAIN_CONFIG = {
   # Frequency at which loss and global step are logged
   'log_every_n_steps': 10,
 
+  # Frequency at which loss and global step are logged
+  'val_every_n_steps': 10,
+
   # Frequency to save model
   'save_model_every_n_step': 421 // 8,  # save model every epoch
 

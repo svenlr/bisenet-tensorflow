@@ -78,10 +78,6 @@ configuration.TRAIN_CONFIG["optimizer_config"]["optimizer"] = args.optimizer
 
 configuration.MODEL_CONFIG["bn_is_training"] = not args.freeze_batch_norm
 
-configuration.TRAIN_CONFIG["validation_data_config"]["random_scale"] = args.random_scale
-configuration.TRAIN_CONFIG["validation_data_config"]["random_mirror"] = args.random_mirror
-configuration.TRAIN_CONFIG["validation_data_config"]["batch_size"] = args.batch_size
-
 
 ex = Experiment(configuration.RUN_NAME)
 ex.observers.append(FileStorageObserver.create(osp.join(configuration.LOG_DIR, 'sacred')))
@@ -199,7 +195,11 @@ def main(model_config, train_config, restore_from=None):
     tf.summary.scalar('learning_rate', learning_rate)
 
     # Set up the training ops
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    if model_config["bn_is_training"]:
+        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    else:
+        logging.info("Not updating mean and variance in batch normalization layers")
+        update_ops = None
     with tf.control_dependencies(update_ops):
         train_op = tf.contrib.layers.optimize_loss(loss=model.total_loss,
                                                    global_step=model.global_step,
@@ -265,7 +265,7 @@ def main(model_config, train_config, restore_from=None):
       _, predict_loss, loss = sess.run([train_op, model.loss, model.total_loss])
       duration = time.time() - start_time
 
-      if step % 10 == 0:
+      if step % train_config["log_every_n_steps"] == 0:
         examples_per_sec = data_config['batch_size'] / float(duration)
         time_remain = data_config['batch_size'] * (total_steps - step) / examples_per_sec
         m, s = divmod(time_remain, 60)
@@ -275,11 +275,12 @@ def main(model_config, train_config, restore_from=None):
         logging.info(format_str % (step, loss, predict_loss, learning_rate.eval(session=sess),
                                    examples_per_sec, duration, h, m, s))
 
-      if step % 10 == 0:
+      if step % train_config["log_every_n_steps"] == 0:
         summary_str = sess.run(summary_op)
         summary_writer.add_summary(summary_str, step)
 
       if step % train_config['save_model_every_n_step'] == 0 or (step + 1) == total_steps:
+        logging.info("Saving model: step ") + str(step)
         checkpoint_path = osp.join(train_config['train_dir'], 'model.ckpt')
         saver.save(sess, checkpoint_path, global_step=step)
 
