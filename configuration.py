@@ -34,6 +34,8 @@ MODEL_CONFIG = {
                       'stride': 8, },
   'conv_config': {"init_method": "kaiming_normal",
                   },
+  # control whether running mean and variance are updated or not
+  "bn_is_training": True,
   'batch_norm_params': {"scale": True,
                         # Decay for the moving averages.
                         "decay": 0.9,

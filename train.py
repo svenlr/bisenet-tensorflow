@@ -47,9 +47,10 @@ parser.add_argument("--random-scale", action="store_true", default=False)
 parser.add_argument("--random-mirror", action="store_true", default=False)
 parser.add_argument("--width", type=int, default=800)
 parser.add_argument("--height", type=int, default=600)
-parser.add_argument("--batch-size", type=int, default=1)
+parser.add_argument("--batch-size", type=int, default=8)
+parser.add_argument("--freeze-batch-norm", action="store_true", default=False)
 parser.add_argument("--initial-lr", type=float, default=1e-3)
-parser.add_argument("--optimizer", type=str, default="SGD", choices=["SGD", "MOMENTUM", "RMSProp"])
+parser.add_argument("--optimizer", type=str, default="MOMENTUM", choices=["SGD", "MOMENTUM", "RMSProp"])
 parser.add_argument("--num-epochs", type=int, default=100)
 parser.add_argument("--restore-from", type=str, default=None)
 parser.add_argument("--epoch-size", type=int, default=2000)
@@ -74,6 +75,8 @@ save_model_every_n_steps = args.steps_per_model_save if args.steps_per_model_sav
 configuration.TRAIN_CONFIG["train_data_config"]["save_model_every_n_steps"] = save_model_every_n_steps
 configuration.TRAIN_CONFIG["lr_config"]["initial_lr"] = args.initial_lr
 configuration.TRAIN_CONFIG["optimizer_config"]["optimizer"] = args.optimizer
+
+configuration.MODEL_CONFIG["bn_is_training"] = not args.freeze_batch_norm
 
 configuration.TRAIN_CONFIG["validation_data_config"]["random_scale"] = args.random_scale
 configuration.TRAIN_CONFIG["validation_data_config"]["random_mirror"] = args.random_mirror
@@ -198,8 +201,6 @@ def main(model_config, train_config, restore_from=None):
     # Set up the training ops
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
-        import inspect
-        print(inspect.getfullargspec(tf.contrib.layers.optimize_loss))
         train_op = tf.contrib.layers.optimize_loss(loss=model.total_loss,
                                                    global_step=model.global_step,
                                                    learning_rate=learning_rate,
@@ -247,6 +248,10 @@ def main(model_config, train_config, restore_from=None):
                            max_to_keep=train_config['max_checkpoints_to_keep'])
 
     g.finalize()  # Finalize graph to avoid adding ops by mistake
+
+    print("Trainable variables:")
+    for var in tf.trainable_variables():
+        print("  " + var.name)
 
     # Training loop
     data_config = train_config['train_data_config']
